@@ -25,7 +25,7 @@ on:
       - '.github/workflows/ci.yml'
 
 concurrency:
-  group: web-ci-${{ github.ref }}
+  group: web-ci-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
