@@ -93,7 +93,13 @@ export class FakeStorageGateway implements StorageGateway {
     const primaryUrl = memberUrls[bundle.primaryMember];
     if (!primaryUrl) throw new Error(`Primary member ${bundle.primaryMember} is not in bundle`);
 
-    return { id, bundleId: bundle.id, primaryUrl, memberUrls };
+    return {
+      id,
+      bundleId: bundle.id,
+      primaryMember: bundle.primaryMember,
+      primaryUrl,
+      memberUrls,
+    };
   }
 
   async releaseMaterialization(materializationId: string): Promise<void> {
