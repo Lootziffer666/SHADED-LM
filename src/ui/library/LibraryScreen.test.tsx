@@ -2,9 +2,9 @@
 import'fake-indexeddb/auto';
 import{fireEvent,render,screen,waitFor}from'@testing-library/react';
 import{describe,expect,it}from'vitest';
-import{LibraryDb}from'../db/libraryDb';
-import type{AssetRecord}from'../domain/library';
-import{LibraryScreen}from'./library/LibraryScreen';
+import{LibraryDb}from'../../db/libraryDb';
+import type{AssetRecord}from'../../domain/library';
+import{LibraryScreen}from'./LibraryScreen';
 
 const asset=(id:string,tags:string[]):AssetRecord=>({id,displayName:id,primaryFormat:'glb',primarySourceRef:{kind:'saf-document',grantId:'g',documentId:id,name:`${id}.glb`,size:123},bundleId:`b:${id}`,categoryPath:['Unsorted'],tags,favorite:false,fingerprint:id,createdAt:1,updatedAt:1});
 
