@@ -64,6 +64,7 @@ export interface StorageGateway {
   validateGrant(grantId: string): Promise<GrantValidation>;
   listTreePage(grantId: string, cursor?: string): Promise<SourcePage>;
   listZip(source: SourceRef, maxDepth: number): Promise<ZipCatalog>;
+  contentHash(source: SourceRef): Promise<string>;
   materialize(bundle: AssetBundle): Promise<MaterializedBundle>;
   releaseMaterialization(materializationId: string): Promise<void>;
   writeManagedBundle(bundle: AssetBundle, destinationPath: string[]): Promise<WriteBundleResult>;
