@@ -1,0 +1,31 @@
+name: Native Core CI
+
+on:
+  push:
+    branches:
+      - feat/mobile-3d-asset-library-core
+    paths:
+      - 'native/android-core/**'
+      - '.github/workflows/native-ci.yml'
+  pull_request:
+    paths:
+      - 'native/android-core/**'
+      - '.github/workflows/native-ci.yml'
+
+concurrency:
+  group: native-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: current
+      - run: gradle -p native/android-core test --stacktrace
