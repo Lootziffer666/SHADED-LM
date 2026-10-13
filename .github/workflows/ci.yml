@@ -37,9 +37,9 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: node-modules
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: node_modules
           key: ${{ runner.os }}-node24-${{ hashFiles('package.json') }}
