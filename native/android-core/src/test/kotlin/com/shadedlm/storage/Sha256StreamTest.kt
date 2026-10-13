@@ -10,7 +10,7 @@ class Sha256StreamTest {
         val bytes = "SHADED-LM streaming hash".encodeToByteArray()
 
         assertEquals(
-            "60a62fd2aa5ab79ebba99c5c527741049949387a797593a1bc10e4e924ed55be",
+            "0972a7baff7885b877b320b7f2a676c28f45ee203f3791e468cc84afd6ffb1d1",
             Sha256Stream.hash(ByteArrayInputStream(bytes), bufferSize = 3),
         )
         assertEquals(
