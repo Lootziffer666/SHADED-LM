@@ -1,6 +1,6 @@
 import{Capacitor,registerPlugin}from'@capacitor/core';
 import type{AssetBundle,SourceRef}from'../domain/library';
-import type{GrantState,MaterializedBundle,SourcePage,StorageGateway,TreeGrant,ZipCatalogResult}from'./storageGateway';
+import type{GrantState,MaterializedBundle,MoveBundleRequest,MoveBundleResult,MoveRecoverySummary,SourcePage,StorageGateway,TreeGrant,ZipCatalogResult}from'./storageGateway';
 
 interface NativeAssetStoragePlugin{
  chooseTree():Promise<TreeGrant>;
@@ -9,6 +9,8 @@ interface NativeAssetStoragePlugin{
  listZip(options:{source:SourceRef;maxDepth:number}):Promise<ZipCatalogResult>;
  materialize(options:{bundle:AssetBundle}):Promise<MaterializedBundle>;
  releaseMaterialization(options:{id:string}):Promise<void>;
+ moveBundle(options:{request:MoveBundleRequest}):Promise<MoveBundleResult>;
+ recoverMoves():Promise<MoveRecoverySummary>;
 }
 const NativeStorage=registerPlugin<NativeAssetStoragePlugin>('AssetStorage');
 const webUrl=(url:string)=>url.startsWith('file:')?Capacitor.convertFileSrc(url):url;
@@ -19,4 +21,6 @@ export class CapacitorStorageGateway implements StorageGateway{
  listZip(source:SourceRef,maxDepth:number){return NativeStorage.listZip({source,maxDepth})}
  async materialize(bundle:AssetBundle){const m=await NativeStorage.materialize({bundle});return{...m,primaryUrl:webUrl(m.primaryUrl),memberUrls:Object.fromEntries(Object.entries(m.memberUrls).map(([k,v])=>[k,webUrl(v)]))}}
  releaseMaterialization(id:string){return NativeStorage.releaseMaterialization({id})}
+ moveBundle(request:MoveBundleRequest){return NativeStorage.moveBundle({request})}
+ recoverMoves(){return NativeStorage.recoverMoves()}
 }
