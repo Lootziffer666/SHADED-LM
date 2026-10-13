@@ -15,6 +15,7 @@ export interface AssetStoragePlugin {
   validateGrant(options: { grantId: string }): Promise<GrantValidation>;
   listTreePage(options: { grantId: string; cursor?: string }): Promise<SourcePage>;
   listZip(options: { source: SourceRef; maxDepth: number }): Promise<ZipCatalog>;
+  contentHash(options: { source: SourceRef }): Promise<{ hash: string }>;
   materialize(options: { bundle: AssetBundle }): Promise<MaterializedBundle>;
   releaseMaterialization(options: { materializationId: string }): Promise<void>;
   writeManagedBundle(options: {
@@ -31,6 +32,7 @@ export function createCapacitorStorageGateway(plugin: AssetStoragePlugin): Stora
     listTreePage: (grantId, cursor) =>
       plugin.listTreePage({ grantId, ...(cursor ? { cursor } : {}) }),
     listZip: (source, maxDepth) => plugin.listZip({ source, maxDepth }),
+    contentHash: async (source) => (await plugin.contentHash({ source })).hash,
     materialize: (bundle) => plugin.materialize({ bundle }),
     releaseMaterialization: (materializationId) =>
       plugin.releaseMaterialization({ materializationId }),
