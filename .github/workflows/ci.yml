@@ -31,3 +31,17 @@ jobs:
       - run: npm test -- src/domain/library.test.ts
       - run: npm test
       - run: npm run build
+
+  native-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: current
+          cache-provider: basic
+      - run: gradle -p native/android-core test --stacktrace
