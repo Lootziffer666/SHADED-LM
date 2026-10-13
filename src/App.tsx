@@ -1,10 +1,9 @@
 import{useEffect,useMemo,useState}from'react';
-import'./styles/tokens.css';
+import'./styles/tokens.css';import'./styles/export.css';
 import{libraryDb}from'./db/libraryDb';
 import{CapacitorStorageGateway}from'./native/capacitorStorageGateway';
 import{recoverMoves}from'./move/moveService';
-import{ImportScreen}from'./ui/ImportScreen';
-import{LibraryScreen}from'./ui/library/LibraryScreen';
-import{ViewerScreen}from'./viewer/ViewerScreen';
+import{exportIndex}from'./export/indexExport';import{exportPortableLibrary}from'./export/portableExport';import{exportFullBackup}from'./export/fullBackupExport';import type{ExportScope}from'./export/exportTypes';
+import{ImportScreen}from'./ui/ImportScreen';import{LibraryScreen}from'./ui/library/LibraryScreen';import{ExportSheet}from'./ui/export/ExportSheet';import{ViewerScreen}from'./viewer/ViewerScreen';
 
-export default function App(){const[library,setLibrary]=useState(false),[assetId,setAssetId]=useState<string>(),gateway=useMemo(()=>new CapacitorStorageGateway(),[]);useEffect(()=>{void libraryDb.assets.count().then(count=>setLibrary(count>0));void recoverMoves(libraryDb,gateway)},[gateway]);if(assetId)return <ViewerScreen assetId={assetId} db={libraryDb} gateway={gateway} onBack={()=>setAssetId(undefined)}/>;return library?<LibraryScreen db={libraryDb} gateway={gateway} onOpen={asset=>setAssetId(asset.id)} onRescan={()=>setLibrary(false)}/>:<ImportScreen db={libraryDb} gateway={gateway} onLibraryReady={()=>setLibrary(true)}/>}
+export default function App(){const[library,setLibrary]=useState(false),[assetId,setAssetId]=useState<string>(),[exportOpen,setExportOpen]=useState(false),[exportIds,setExportIds]=useState<string[]|undefined>(),gateway=useMemo(()=>new CapacitorStorageGateway(),[]);useEffect(()=>{void libraryDb.assets.count().then(count=>setLibrary(count>0));void recoverMoves(libraryDb,gateway)},[gateway]);if(assetId)return <ViewerScreen assetId={assetId} db={libraryDb} gateway={gateway} onBack={()=>setAssetId(undefined)}/>;if(!library)return <ImportScreen db={libraryDb} gateway={gateway} onLibraryReady={()=>setLibrary(true)}/>;const beginExport=(ids?:string[])=>{setExportIds(ids?.length?ids:undefined);setExportOpen(true)};const runExport=async(scope:ExportScope)=>{if(scope==='index')await exportIndex(libraryDb,gateway,exportIds);else if(scope==='portable')await exportPortableLibrary(libraryDb,gateway,exportIds);else await exportFullBackup(libraryDb,gateway);setExportOpen(false)};return <><LibraryScreen db={libraryDb} gateway={gateway} onOpen={asset=>setAssetId(asset.id)} onRescan={()=>setLibrary(false)} onExport={beginExport}/><button className="global-export" aria-label="Bibliothek exportieren" onClick={()=>beginExport()}>Export</button>{exportOpen&&<div className="modal-backdrop"><ExportSheet selectionCount={exportIds?.length??0} onExport={runExport} onClose={()=>setExportOpen(false)}/></div>}</>}

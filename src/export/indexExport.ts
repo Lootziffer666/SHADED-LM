@@ -1,0 +1,3 @@
+import type{LibraryDb}from'../db/libraryDb';import type{StorageGateway}from'../native/storageGateway';import type{ExportResult}from'./exportTypes';import{writeIndexContents}from'./writeIndexContents';
+const date=()=>new Date().toISOString().slice(0,10);
+export async function exportIndex(db:LibraryDb,gateway:StorageGateway,assetIds?:string[]):Promise<ExportResult>{const target=await gateway.createExportTarget(`SHADED-LM-index-${date()}.zip`);try{const{files}=await writeIndexContents(db,gateway,target.id,assetIds);const done=await gateway.finalizeExport(target.id);return{targetId:target.id,files,bytes:done.bytes}}catch(error){await gateway.abortExport(target.id);throw error}}
