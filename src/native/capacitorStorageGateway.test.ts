@@ -13,6 +13,7 @@ describe('CapacitorStorageGateway', () => {
       validateGrant: vi.fn(async () => ({ valid: true, readable: true, writable: true })),
       listTreePage: vi.fn(async () => ({ entries: [], nextCursor: undefined })),
       listZip: vi.fn(async () => ({ entries: [], warnings: [] })),
+      contentHash: vi.fn(async () => ({ hash: 'sha256:model' })),
       materialize: vi.fn(async ({ bundle }) => ({
         id: `mat-${bundle.id}`,
         bundleId: bundle.id,
@@ -50,6 +51,7 @@ describe('CapacitorStorageGateway', () => {
     await gateway.chooseTree();
     await gateway.validateGrant('grant-1');
     await gateway.listTreePage('grant-1', 'cursor-2');
+    await gateway.contentHash(bundle.members[0]!.source);
     await gateway.materialize(bundle);
     await gateway.releaseMaterialization('mat-bundle-1');
     await gateway.writeManagedBundle(bundle, ['Characters', 'Humans', 'Men']);
@@ -57,6 +59,7 @@ describe('CapacitorStorageGateway', () => {
 
     expect(plugin.validateGrant).toHaveBeenCalledWith({ grantId: 'grant-1' });
     expect(plugin.listTreePage).toHaveBeenCalledWith({ grantId: 'grant-1', cursor: 'cursor-2' });
+    expect(plugin.contentHash).toHaveBeenCalledWith({ source: bundle.members[0]!.source });
     expect(plugin.materialize).toHaveBeenCalledWith({ bundle });
     expect(plugin.releaseMaterialization).toHaveBeenCalledWith({ materializationId: 'mat-bundle-1' });
     expect(plugin.writeManagedBundle).toHaveBeenCalledWith({
