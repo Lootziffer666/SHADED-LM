@@ -6,15 +6,28 @@ on:
       - feat/mobile-3d-asset-library-core
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - run: npm install
+          node-version: 24
+          package-manager-cache: false
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node24-${{ hashFiles('package.json') }}
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm install --prefer-offline --no-audit --no-fund
       - run: npm test -- src/domain/library.test.ts
       - run: npm test
       - run: npm run build
