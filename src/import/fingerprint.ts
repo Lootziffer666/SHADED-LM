@@ -1,0 +1,3 @@
+import type{AssetBundle,SourceRef}from'../domain/library';
+function sourceSig(s:SourceRef):string{if(s.kind==='saf-document')return`d:${s.documentId}:${s.size??'?'}:${s.modifiedAt??'?'}`;return`z:${sourceSig(s.archive)}:${s.entryPath}:${s.size??'?'}:${s.crc32??'?'}:${s.modifiedAt??'?'}`}
+export function fingerprintBundle(bundle:AssetBundle):string{const raw=bundle.members.map(m=>`${m.relativePath}|${m.role}|${m.size??'?'}|${sourceSig(m.source)}`).sort().join('\n');let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,'0')}
