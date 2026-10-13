@@ -18,12 +18,14 @@ export interface FakeStorageGatewayOptions {
   treePages?: FakeTreePage[];
   zipCatalogs?: Record<string, ZipCatalog>;
   grantValidation?: GrantValidation;
+  contentHashes?: Record<string, string>;
 }
 
 export class FakeStorageGateway implements StorageGateway {
   readonly releasedMaterializations: string[] = [];
   readonly deletedSources: SourceRef[][] = [];
   readonly writtenBundles: Array<{ bundleId: string; destinationPath: string[] }> = [];
+  readonly hashedSources: SourceRef[] = [];
 
   private materializationSequence = 0;
 
@@ -70,6 +72,12 @@ export class FakeStorageGateway implements StorageGateway {
     if (!catalog) return { entries: [], warnings: [] };
 
     return structuredClone(catalog);
+  }
+
+  async contentHash(source: SourceRef): Promise<string> {
+    this.hashedSources.push(structuredClone(source));
+    const key = source.kind === 'zip-entry' ? source.entryPath : source.displayPath;
+    return this.options.contentHashes?.[key] ?? `fake-hash:${key}`;
   }
 
   async materialize(bundle: AssetBundle): Promise<MaterializedBundle> {
