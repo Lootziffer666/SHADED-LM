@@ -46,6 +46,7 @@ export interface ZipCatalog {
 export interface MaterializedBundle {
   id: string;
   bundleId: string;
+  primaryMember: string;
   primaryUrl: string;
   memberUrls: Record<string, string>;
 }
