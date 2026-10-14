@@ -42,9 +42,16 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm run android:prepare
-      - name: Native tests
+      - name: Native tests and APK
         shell: bash
-        run: cd android && chmod +x gradlew && set -o pipefail; ./gradlew test 2>&1 | tee ../android-test.log
+        run: cd android && chmod +x gradlew && set -o pipefail; ./gradlew test assembleDebug 2>&1 | tee ../android-test.log
+      - name: Upload Android APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHADED-LM-debug-${{ github.run_id }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
       - name: Upload Android diagnostics
         if: always()
         uses: actions/upload-artifact@v4
