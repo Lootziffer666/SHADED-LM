@@ -7,7 +7,6 @@ import com.getcapacitor.JSObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.UUID
@@ -21,7 +20,7 @@ class MaterializationStore(private val context: Context) {
         val id = UUID.randomUUID().toString()
         val root = File(baseDir, id).apply { mkdirs() }
         val members = bundle.getJSONArray("members")
-        val primary = bundle.getJSONObject("primaryMember")
+        val primaryPath = BundlePrimaryPath.clean(bundle.getString("primaryMember"))
         val archiveCache = mutableMapOf<String, File>()
         val urls = JSObject()
         val relativePaths = JSONArray()
@@ -36,17 +35,9 @@ class MaterializationStore(private val context: Context) {
                 val url = Uri.fromFile(target).toString()
                 urls.put(relative, url)
                 relativePaths.put(relative)
-                if (sameMember(member, primary)) primaryUrl = url
+                if (BundlePrimaryPath.matches(primaryPath, relative)) primaryUrl = url
             }
-            if (primaryUrl == null) {
-                val relative = SourcePathPolicy.clean(primary.getString("relativePath"))
-                val target = safeChild(root, relative)
-                target.parentFile?.mkdirs()
-                copySource(primary.getJSONObject("source"), target, archiveCache)
-                primaryUrl = Uri.fromFile(target).toString()
-                urls.put(relative, primaryUrl)
-                relativePaths.put(relative)
-            }
+            require(primaryUrl != null) { "Primary member not found in bundle members: $primaryPath" }
             return JSObject().apply {
                 put("id", id)
                 put("primaryUrl", primaryUrl)
@@ -96,7 +87,7 @@ class MaterializationStore(private val context: Context) {
     }
 
     private fun sourceIdentity(source: JSONObject): String = when (source.getString("kind")) {
-        "saf-document" -> "${source.getString("grantId")}:${source.getString("documentId")}" 
+        "saf-document" -> "${source.getString("grantId")}:${source.getString("documentId")}"
         "zip-entry" -> sourceIdentity(source.getJSONObject("archive")) + "!" + source.getString("entryPath")
         else -> source.toString()
     }
@@ -105,9 +96,6 @@ class MaterializationStore(private val context: Context) {
         val grant = Uri.parse(source.getString("grantId"))
         return DocumentsContract.buildDocumentUriUsingTree(grant, source.getString("documentId"))
     }
-
-    private fun sameMember(a: JSONObject, b: JSONObject): Boolean =
-        a.optString("relativePath") == b.optString("relativePath") && sourceIdentity(a.getJSONObject("source")) == sourceIdentity(b.getJSONObject("source"))
 
     private fun safeChild(root: File, relative: String): File {
         val child = File(root, relative)
