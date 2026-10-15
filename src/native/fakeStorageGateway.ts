@@ -21,9 +21,15 @@ export class FakeStorageGateway implements StorageGateway {
   exportWrites: Array<{ targetId: string; path: string; source?: SourceRef; base64?: string }> = [];
   finalizedExports: string[] = [];
   abortedExports: string[] = [];
+  downloadsChosen = 0;
 
   async chooseTree(): Promise<TreeGrant> {
     return { id: 'fake', displayName: 'Assets', rootDocumentId: 'root' };
+  }
+
+  async chooseDownloads(): Promise<TreeGrant> {
+    this.downloadsChosen++;
+    return { id: 'native-downloads://primary', displayName: 'Downloads', rootDocumentId: 'Downloads' };
   }
 
   async validateGrant(): Promise<GrantState> {
