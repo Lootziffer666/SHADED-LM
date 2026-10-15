@@ -10,8 +10,8 @@ export interface LoadedAssetSession {
   root: Object3D;
   animations: AnimationClip[];
   objectUrls: string[];
-  format: ModelFormat;
-  materialized: MaterializedBundle;
+  format?: ModelFormat;
+  materialized?: MaterializedBundle;
 }
 
 export interface AdapterResult {
@@ -39,7 +39,7 @@ function normalizeResourcePath(value: string): string {
 }
 
 export function detectMaterializedFormat(bundle: MaterializedBundle): ModelFormat {
-  const primary = bundle.primaryMember || bundle.relativePaths.find((path) => /\.(glb|gltf|fbx|obj)$/i.test(path));
+  const primary = bundle.primaryMember ?? bundle.relativePaths.find((path) => /\.(glb|gltf|fbx|obj)$/i.test(path));
   if (!primary) throw new Error('Materialized bundle has no primary model path');
   const ext = primary.split('.').pop()?.toLowerCase() as ModelFormat | undefined;
   if (!ext || !supported.has(ext)) throw new Error(`Unsupported primary format: ${ext ?? 'unknown'}`);
