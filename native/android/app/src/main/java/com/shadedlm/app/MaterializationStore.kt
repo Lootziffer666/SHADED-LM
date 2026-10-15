@@ -7,6 +7,7 @@ import com.getcapacitor.JSObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.UUID
@@ -59,7 +60,7 @@ class MaterializationStore(private val context: Context) {
 
     fun copySource(source: JSONObject, target: File, archiveCache: MutableMap<String, File> = mutableMapOf()) {
         when (source.getString("kind")) {
-            "saf-document" -> resolver.openInputStream(documentUri(source)).useRequired { input ->
+            "saf-document" -> openDocumentInput(source).useRequired { input ->
                 FileOutputStream(target).use { output -> input.copyTo(output) }
             }
             "zip-entry" -> {
@@ -74,6 +75,17 @@ class MaterializationStore(private val context: Context) {
             }
             else -> throw IllegalArgumentException("Unknown source kind: ${source.optString("kind")}")
         }
+    }
+
+    private fun openDocumentInput(source: JSONObject): InputStream? {
+        val grantId = source.getString("grantId")
+        if (NativeDownloads.isGrant(grantId)) {
+            require(NativeDownloads.hasAccess()) { "Downloads access is not granted" }
+            val file = NativeDownloads.resolve(NativeDownloads.root(), source.getString("documentId"))
+            require(file.isFile) { "Downloads source is unavailable: ${source.getString("documentId")}" }
+            return FileInputStream(file)
+        }
+        return resolver.openInputStream(documentUri(source))
     }
 
     private fun archiveFile(source: JSONObject, cache: MutableMap<String, File>): File {
