@@ -12,6 +12,7 @@ const asset: AssetRecord = { id: 'a', displayName: 'A', primaryFormat: 'obj', pr
 function gateway(result: MoveBundleResult, capture: (r: MoveBundleRequest) => void): StorageGateway {
   return {
     chooseTree: async () => ({ id: 'g', displayName: 'Assets', rootDocumentId: 'root' }),
+    chooseDownloads: async () => ({ id: 'native-downloads://primary', displayName: 'Downloads', rootDocumentId: 'Downloads' }),
     validateGrant: async () => 'available',
     listTreePage: async () => ({ entries: [] }),
     listZip: async () => ({ entries: [], warnings: [] }),
