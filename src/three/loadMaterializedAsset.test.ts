@@ -15,6 +15,7 @@ function materialized(primaryMember: string, memberUrls?: Record<string, string>
     primaryMember,
     primaryUrl: urls[primaryMember]!,
     memberUrls: urls,
+    relativePaths: Object.keys(urls),
   };
 }
 
@@ -33,12 +34,12 @@ function adapters() {
     loadObj: vi.fn(async () => ({ root: objRoot, animations: [] })),
   };
 
-  return { value, gltfRoot, fbxRoot, objRoot, animation };
+  return { value, gltfRoot, fbxRoot, objRoot };
 }
 
 describe('loadMaterializedAsset', () => {
   it.each([
-    ['model.glb', 'gltf', 'loadGltf'],
+    ['model.glb', 'glb', 'loadGltf'],
     ['scene.GLTF', 'gltf', 'loadGltf'],
     ['Hero.FBX', 'fbx', 'loadFbx'],
     ['prop.obj', 'obj', 'loadObj'],
@@ -52,7 +53,7 @@ describe('loadMaterializedAsset', () => {
     expect(session.materialized).toBe(bundle);
     expect(fake.value[method]).toHaveBeenCalledTimes(1);
     expect(session.root).toBe(
-      format === 'gltf' ? fake.gltfRoot : format === 'fbx' ? fake.fbxRoot : fake.objRoot,
+      method === 'loadGltf' ? fake.gltfRoot : method === 'loadFbx' ? fake.fbxRoot : fake.objRoot,
     );
   });
 

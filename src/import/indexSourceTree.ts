@@ -1,325 +1,39 @@
-import type { LibraryDb } from '../db/libraryDb';
-import type {
-  AssetBundle,
-  AssetRecord,
-  IndexJobRecord,
-  PackRecord,
-  SourceRef,
-} from '../domain/library';
-import type { SourceEntry, StorageGateway, ZipCatalog } from '../native/storageGateway';
-import { discoverSources, type DiscoveredSource } from './discoverSources';
-import { fingerprintBundle } from './fingerprint';
-import { resolveBundle, type BundleCatalogMember } from './resolveBundle';
+import type{AssetBundle,AssetRecord,PackRecord,SourceRef}from'../domain/library';
+import type{LibraryDb}from'../db/libraryDb';
+import type{StorageGateway}from'../native/storageGateway';
+import{discoverSourceCatalog}from'./discoverSources';
+import{resolveBundle}from'./resolveBundle';
+import{fingerprintBundle}from'./fingerprint';
 
-const MAX_ZIP_DEPTH = 3;
+export interface IndexSummary{discovered:number;queued:number;unchanged:number;warnings:string[];unavailable?:number}
 
-export interface IndexSummary {
-  discovered: number;
-  queued: number;
-  unchanged: number;
-  unavailable: number;
-  grantAvailable: boolean;
-  warnings: string[];
-}
+function sourceIdentity(s:SourceRef):string{return s.kind==='saf-document'?`${s.grantId}:${s.documentId}`:`${sourceIdentity(s.archive)}!${s.entryPath}`}
+function sourceGrantId(s:SourceRef):string{return s.kind==='saf-document'?s.grantId:sourceGrantId(s.archive)}
+function nameWithoutExt(path:string){const n=path.slice(path.lastIndexOf('/')+1);return n.replace(/\.[^.]+$/,'')}
+function archiveIdentity(s:SourceRef):string{return s.kind==='zip-entry'?sourceIdentity(s.archive):sourceIdentity(s)}
+function sameBundleShape(a:AssetBundle|undefined,b:AssetBundle){if(!a||a.members.length!==b.members.length)return false;const sig=(x:AssetBundle)=>x.members.map(m=>`${m.role}:${m.size??'?'}:${m.relativePath.slice(m.relativePath.lastIndexOf('/')+1)}`).sort().join('|');return sig(a)===sig(b)}
 
-interface TreeInventory {
-  members: BundleCatalogMember[];
-  archives: Map<string, SourceEntry>;
-}
-
-export async function indexSourceTree(
-  gateway: StorageGateway,
-  db: LibraryDb,
-  grantId: string,
-): Promise<IndexSummary> {
-  const grant = await gateway.validateGrant(grantId);
-  if (!grant.valid || !grant.readable) {
-    const unavailable = await markGrantUnavailable(db, grantId);
-    return {
-      discovered: 0,
-      queued: 0,
-      unchanged: 0,
-      unavailable,
-      grantAvailable: false,
-      warnings: [grant.reason ?? 'Source grant is unavailable'],
-    };
-  }
-
-  const warnings: string[] = [];
-  const inventory = await collectTreeInventory(gateway, grantId);
-  const sources = await discoverSources(gateway, grantId, (warning) => warnings.push(warning.message));
-  const zipCatalogCache = new Map<string, BundleCatalogMember[]>();
-  const packUpdates = new Map<string, PackRecord>();
-  const seenAssetIds = new Set<string>();
-  const now = Date.now();
-  let queued = 0;
-  let unchanged = 0;
-
-  for (const source of sources) {
-    const catalog =
-      source.source.kind === 'zip-entry'
-        ? await zipBundleCatalog(gateway, grantId, source, inventory.archives, zipCatalogCache, warnings)
-        : inventory.members;
-    const candidate = resolveBundle(source, catalog);
-    const fingerprint = await fingerprintBundle(candidate, (ref) => gateway.contentHash(ref));
-    const assetId = stableAssetId(source.source);
-    seenAssetIds.add(assetId);
-
-    const existing = await db.assets.get(assetId);
-    const changed = !existing || existing.fingerprint !== fingerprint;
-    const pack = source.packName ? packForSource(source, grantId, inventory.archives, assetId) : null;
-    const packId = pack?.id ?? null;
-
-    if (pack) {
-      const current = packUpdates.get(pack.id) ?? (await db.packs.get(pack.id)) ?? pack;
-      packUpdates.set(pack.id, {
-        ...current,
-        name: pack.name,
-        sourceArchiveRef: pack.sourceArchiveRef,
-        assetIds: unique([...current.assetIds, assetId]),
-      });
-    }
-
-    const asset: AssetRecord = {
-      id: assetId,
-      displayName: source.displayName,
-      primaryFormat: source.primaryFormat,
-      primarySourceRef: source.source,
-      bundleId: candidate.id,
-      categoryPath: existing?.categoryPath ?? ['Unsorted'],
-      tags: existing?.tags ?? [],
-      favorite: existing?.favorite ?? false,
-      packId,
-      thumbnailId: changed ? null : existing?.thumbnailId ?? null,
-      fingerprint,
-      inspection: changed ? null : existing?.inspection ?? null,
-      sourceAvailable: true,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: changed || existing?.sourceAvailable === false ? now : existing?.updatedAt ?? now,
-    };
-
-    const bundle: AssetBundle = {
-      id: candidate.id,
-      primaryMember: candidate.primaryMember,
-      members: candidate.members,
-      totalBytes: candidate.totalBytes,
-      dependencyWarnings: candidate.dependencyWarnings,
-    };
-
-    await db.transaction('rw', db.assets, db.bundles, db.jobs, async () => {
-      await db.bundles.put(bundle);
-      await db.assets.put(asset);
-      if (changed) {
-        const job: IndexJobRecord = {
-          id: `job:${assetId}:${fingerprint}`,
-          assetId,
-          fingerprint,
-          state: 'queued',
-          attempts: 0,
-          updatedAt: now,
-          error: null,
-        };
-        await db.jobs.put(job);
-      }
-    });
-
-    if (changed) queued += 1;
-    else unchanged += 1;
-  }
-
-  if (packUpdates.size > 0) {
-    await db.packs.bulkPut([...packUpdates.values()]);
-  }
-
-  const unavailable = await markMissingAssetsUnavailable(db, grantId, seenAssetIds, now);
-
-  return {
-    discovered: sources.length,
-    queued,
-    unchanged,
-    unavailable,
-    grantAvailable: true,
-    warnings,
-  };
-}
-
-async function collectTreeInventory(
-  gateway: StorageGateway,
-  grantId: string,
-): Promise<TreeInventory> {
-  const members: BundleCatalogMember[] = [];
-  const archives = new Map<string, SourceEntry>();
-  let cursor: string | undefined;
-
-  do {
-    const page = await gateway.listTreePage(grantId, cursor);
-    for (const entry of page.entries) {
-      if (entry.kind !== 'file') continue;
-      const source: SourceRef = {
-        kind: 'saf-document',
-        grantId,
-        documentId: entry.documentId,
-        displayPath: entry.relativePath,
-        mimeType: entry.mimeType,
-        size: entry.size,
-        modifiedAt: entry.modifiedAt,
-      };
-      members.push({
-        relativePath: entry.relativePath,
-        source,
-        size: entry.size,
-        modifiedAt: entry.modifiedAt,
-      });
-      if (extensionOf(entry.relativePath) === 'zip') archives.set(entry.documentId, entry);
-    }
-    cursor = page.nextCursor;
-  } while (cursor);
-
-  return { members, archives };
-}
-
-async function zipBundleCatalog(
-  gateway: StorageGateway,
-  grantId: string,
-  source: DiscoveredSource,
-  archives: Map<string, SourceEntry>,
-  cache: Map<string, BundleCatalogMember[]>,
-  warnings: string[],
-): Promise<BundleCatalogMember[]> {
-  if (source.source.kind !== 'zip-entry') return [];
-  const archiveId = source.source.archiveDocumentId;
-  const cached = cache.get(archiveId);
-  if (cached) return cached;
-
-  const archive = archives.get(archiveId);
-  if (!archive) {
-    warnings.push(`Archive metadata missing for ${source.source.archiveName}`);
-    return [memberFromDiscoveredSource(source)];
-  }
-
-  const archiveRef: SourceRef = {
-    kind: 'saf-document',
-    grantId,
-    documentId: archive.documentId,
-    displayPath: archive.relativePath,
-    mimeType: archive.mimeType,
-    size: archive.size,
-    modifiedAt: archive.modifiedAt,
-  };
-  const catalog: ZipCatalog = await gateway.listZip(archiveRef, MAX_ZIP_DEPTH);
-  warnings.push(...catalog.warnings);
-
-  const members = catalog.entries
-    .filter((entry) => entry.kind === 'file')
-    .map<BundleCatalogMember>((entry) => ({
-      relativePath: entry.path,
-      source: {
-        kind: 'zip-entry',
-        grantId,
-        archiveDocumentId: archive.documentId,
-        archiveName: archive.name,
-        entryPath: entry.path,
-        archiveDepth: entry.archiveDepth,
-        size: entry.size,
-        modifiedAt: entry.modifiedAt ?? null,
-        crc32: entry.crc32,
-      },
-      size: entry.size,
-      modifiedAt: entry.modifiedAt ?? null,
-      crc32: entry.crc32,
-    }));
-
-  cache.set(archiveId, members);
-  return members;
-}
-
-function memberFromDiscoveredSource(source: DiscoveredSource): BundleCatalogMember {
-  const relativePath = source.source.kind === 'zip-entry' ? source.source.entryPath : source.source.displayPath;
-  return {
-    relativePath,
-    source: source.source,
-    size: source.size,
-    modifiedAt: source.modifiedAt,
-    crc32: source.source.kind === 'zip-entry' ? source.source.crc32 ?? null : null,
-  };
-}
-
-function packForSource(
-  source: DiscoveredSource,
-  grantId: string,
-  archives: Map<string, SourceEntry>,
-  assetId: string,
-): PackRecord | null {
-  if (source.source.kind !== 'zip-entry' || !source.packName) return null;
-  const nestedArchivePath = source.source.entryPath.split('!/').slice(0, -1).join('!/');
-  const identity = nestedArchivePath || source.source.archiveName;
-  const archive = archives.get(source.source.archiveDocumentId);
-
-  const sourceArchiveRef: SourceRef = archive
-    ? {
-        kind: 'saf-document',
-        grantId,
-        documentId: archive.documentId,
-        displayPath: archive.relativePath,
-        mimeType: archive.mimeType,
-        size: archive.size,
-        modifiedAt: archive.modifiedAt,
-      }
-    : {
-        kind: 'saf-document',
-        grantId,
-        documentId: source.source.archiveDocumentId,
-        displayPath: source.source.archiveName,
-      };
-
-  return {
-    id: `pack:${grantId}:${source.source.archiveDocumentId}:${identity}`,
-    name: source.packName,
-    sourceArchiveRef,
-    assetIds: [assetId],
-  };
-}
-
-async function markGrantUnavailable(db: LibraryDb, grantId: string): Promise<number> {
-  const assets = (await db.assets.toArray()).filter((asset) => asset.primarySourceRef.grantId === grantId);
-  if (assets.length === 0) return 0;
-  await db.assets.bulkPut(assets.map((asset) => ({ ...asset, sourceAvailable: false })));
-  return assets.length;
-}
-
-async function markMissingAssetsUnavailable(
-  db: LibraryDb,
-  grantId: string,
-  seenAssetIds: Set<string>,
-  now: number,
-): Promise<number> {
-  const missing = (await db.assets.toArray()).filter(
-    (asset) => asset.primarySourceRef.grantId === grantId && !seenAssetIds.has(asset.id),
-  );
-  if (missing.length === 0) return 0;
-  await db.assets.bulkPut(
-    missing.map((asset) => ({
-      ...asset,
-      sourceAvailable: false,
-      updatedAt: asset.sourceAvailable ? now : asset.updatedAt,
-    })),
-  );
-  return missing.length;
-}
-
-function stableAssetId(source: SourceRef): string {
-  if (source.kind === 'zip-entry') {
-    return `asset:${source.grantId}:${source.archiveDocumentId}:${source.entryPath}`;
-  }
-  return `asset:${source.grantId}:${source.documentId}`;
-}
-
-function extensionOf(path: string): string {
-  const name = path.replace(/\\/g, '/').split('/').at(-1) ?? path;
-  const dot = name.lastIndexOf('.');
-  return dot > -1 ? name.slice(dot + 1).toLowerCase() : '';
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
+export async function indexSourceTree(gateway:StorageGateway,db:LibraryDb,grantId:string):Promise<IndexSummary>{
+ const grant=await gateway.validateGrant(grantId);
+ if(grant!=='available'){
+   const affected=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===grantId);
+   await db.assets.bulkPut(affected.map(a=>({...a,sourceAvailable:false,updatedAt:Date.now()})));
+   return{discovered:0,queued:0,unchanged:0,warnings:[`SAF grant ${grantId} is ${grant}`],unavailable:affected.length};
+ }
+ const discovery=await discoverSourceCatalog(gateway,grantId);let queued=0,unchanged=0;const seen=new Set<string>();const now=Date.now();
+ for(const item of discovery.models){
+   const identity=sourceIdentity(item.source),alias=(await db.settings.get(`sourceAlias:${identity}`))?.value;
+   const id=typeof alias==='string'?alias:`asset:${identity}`;const existing=await db.assets.get(id);seen.add(id);
+   const primary={relativePath:item.relativePath,source:item.source,size:item.source.size};const bundle=resolveBundle(primary,item.catalog);bundle.id=existing?.bundleId??`bundle:${identity}`;
+   const oldBundle=existing?await db.bundles.get(existing.bundleId):undefined;const candidateFingerprint=fingerprintBundle(bundle);const fingerprint=typeof alias==='string'&&existing&&sameBundleShape(oldBundle,bundle)?existing.fingerprint:candidateFingerprint;
+   let packId:string|undefined=existing?.packId;
+   if(item.packName){packId=`pack:${archiveIdentity(item.source)}`;const old=await db.packs.get(packId);const pack:PackRecord={id:packId,name:item.packName,sourceArchiveRef:item.source.kind==='zip-entry'?item.source.archive:undefined,assetIds:[...new Set([...(old?.assetIds??[]),id])]};await db.packs.put(pack)}
+   const asset:AssetRecord={id,displayName:existing?.displayName??nameWithoutExt(item.relativePath),primaryFormat:item.format,primarySourceRef:item.source,bundleId:bundle.id,categoryPath:existing?.categoryPath??['Unsorted'],tags:existing?.tags??[],favorite:existing?.favorite??false,packId,thumbnailId:existing?.thumbnailId,fingerprint,inspection:existing?.fingerprint===fingerprint?existing.inspection:undefined,sourceAvailable:true,createdAt:existing?.createdAt??now,updatedAt:now};
+   await db.bundles.put(bundle);await db.assets.put(asset);
+   if(existing?.fingerprint===fingerprint){unchanged++;continue}
+   const jobId=`job:${id}:${fingerprint}`;if(!(await db.jobs.get(jobId))){await db.jobs.put({id:jobId,assetId:id,fingerprint,state:'queued',updatedAt:now});queued++}
+ }
+ const missing=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===grantId&&!seen.has(a.id)&&a.sourceAvailable!==false);
+ if(missing.length)await db.assets.bulkPut(missing.map(a=>({...a,sourceAvailable:false,updatedAt:now})));
+ return{discovered:discovery.models.length,queued,unchanged,warnings:discovery.warnings.map(w=>w.message),unavailable:missing.length};
 }

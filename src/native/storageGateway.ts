@@ -1,27 +1,22 @@
 import type { AssetBundle, SourceRef } from '../domain/library';
+import type { ExportTarget } from '../export/exportTypes';
 
 export interface TreeGrant {
-  grantId: string;
-  treeUri: string;
+  id: string;
   displayName: string;
+  rootDocumentId: string;
 }
 
-export interface GrantValidation {
-  valid: boolean;
-  readable: boolean;
-  writable: boolean;
-  reason?: string;
-}
+export type GrantState = 'available' | 'revoked' | 'missing';
 
 export interface SourceEntry {
-  documentId: string;
-  parentDocumentId: string | null;
-  kind: 'file' | 'directory';
+  source: SourceRef;
   name: string;
   relativePath: string;
-  mimeType: string;
-  size: number;
-  modifiedAt: number | null;
+  mime?: string;
+  size?: number;
+  modifiedAt?: number;
+  directory: boolean;
 }
 
 export interface SourcePage {
@@ -29,49 +24,75 @@ export interface SourcePage {
   nextCursor?: string;
 }
 
-export interface ZipEntryDescriptor {
-  path: string;
-  kind: 'file' | 'directory';
-  size: number;
-  crc32: number | null;
-  archiveDepth: number;
-  modifiedAt?: number | null;
+export interface ZipCatalogEntry {
+  source: SourceRef;
+  entryPath: string;
+  name: string;
+  size?: number;
+  crc32?: number;
+  directory: boolean;
+  depth: number;
 }
 
-export interface ZipCatalog {
-  entries: ZipEntryDescriptor[];
+export interface ZipCatalogResult {
+  entries: ZipCatalogEntry[];
   warnings: string[];
 }
 
+/**
+ * A native bundle materialized into WebView-readable URLs.
+ * `primaryMember` is retained explicitly instead of trying to infer it back
+ * from a converted file URL; this is the contract added by PR #2.
+ */
 export interface MaterializedBundle {
   id: string;
   bundleId: string;
   primaryMember: string;
   primaryUrl: string;
   memberUrls: Record<string, string>;
+  relativePaths: string[];
 }
 
-export interface WriteBundleResult {
+export interface MoveBundleRequest {
+  journalId: string;
+  assetId?: string;
+  bundle: AssetBundle;
+  destinationGrantId: string;
   destinationPath: string[];
-  writtenMembers: Array<{
-    relativePath: string;
-    documentId: string;
-    size: number;
-  }>;
+  displayName?: string;
+}
+
+export interface MoveBundleResult {
+  journalId: string;
+  assetId?: string;
+  status: 'committed' | 'failed';
+  destinationSources?: Record<string, SourceRef>;
+  destinationPath?: string[];
+  error?: string;
+}
+
+export interface MoveRecoverySummary {
+  recovered: number;
+  failed: number;
+  results?: MoveBundleResult[];
+}
+
+export interface ExportWrite {
+  base64?: string;
+  source?: SourceRef;
 }
 
 export interface StorageGateway {
   chooseTree(): Promise<TreeGrant>;
-  validateGrant(grantId: string): Promise<GrantValidation>;
+  validateGrant(grantId: string): Promise<GrantState>;
   listTreePage(grantId: string, cursor?: string): Promise<SourcePage>;
-  listZip(source: SourceRef, maxDepth: number): Promise<ZipCatalog>;
-  contentHash(source: SourceRef): Promise<string>;
+  listZip(source: SourceRef, maxDepth: number): Promise<ZipCatalogResult>;
   materialize(bundle: AssetBundle): Promise<MaterializedBundle>;
-  releaseMaterialization(materializationId: string): Promise<void>;
-  writeManagedBundle(bundle: AssetBundle, destinationPath: string[]): Promise<WriteBundleResult>;
-  deleteMembers(members: SourceRef[]): Promise<void>;
-}
-
-export function sourceDisplayPath(source: SourceRef): string {
-  return source.kind === 'zip-entry' ? source.entryPath : source.displayPath;
+  releaseMaterialization(id: string): Promise<void>;
+  moveBundle(request: MoveBundleRequest): Promise<MoveBundleResult>;
+  recoverMoves(): Promise<MoveRecoverySummary>;
+  createExportTarget(suggestedName: string): Promise<ExportTarget>;
+  writeExportFile(targetId: string, path: string, write: ExportWrite): Promise<void>;
+  finalizeExport(targetId: string): Promise<{ bytes: number }>;
+  abortExport(targetId: string): Promise<void>;
 }
