@@ -6,6 +6,7 @@ const root=process.cwd();
 const android=join(root,'android');
 const appGradle=join(android,'app','build.gradle');
 const rootGradle=join(android,'build.gradle');
+const manifest=join(android,'app','src','main','AndroidManifest.xml');
 const nativeSrc=join(root,'native','android','app','src');
 
 function run(command,args,cwd=root){const result=spawnSync(command,args,{cwd,stdio:'inherit',shell:process.platform==='win32'});if(result.status!==0)process.exit(result.status??1)}
@@ -19,6 +20,7 @@ patch(appGradle,text=>{
  if(!next.includes('kotlinOptions'))next=next.replace(/android \{/,"android {\n    kotlinOptions { jvmTarget = '21' }");
  return next;
 });
+patch(manifest,text=>text.includes('android.permission.MANAGE_EXTERNAL_STORAGE')?text:text.replace(/<application\b/,`<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />\n\n    <application`));
 if(existsSync(nativeSrc)){mkdirSync(join(android,'app','src'),{recursive:true});cpSync(nativeSrc,join(android,'app','src'),{recursive:true})}
 const pluginFile=join(android,'app','src','main','java','com','shadedlm','app','AssetStoragePlugin.kt');
 if(existsSync(pluginFile)){

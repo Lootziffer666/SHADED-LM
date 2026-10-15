@@ -84,6 +84,7 @@ export interface ExportWrite {
 
 export interface StorageGateway {
   chooseTree(): Promise<TreeGrant>;
+  chooseDownloads(): Promise<TreeGrant>;
   validateGrant(grantId: string): Promise<GrantState>;
   listTreePage(grantId: string, cursor?: string): Promise<SourcePage>;
   listZip(source: SourceRef, maxDepth: number): Promise<ZipCatalogResult>;

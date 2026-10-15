@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
+import java.io.File
 import java.util.ArrayDeque
 import java.util.concurrent.ConcurrentHashMap
 
@@ -13,6 +14,11 @@ class SafTreeWalker(private val resolver: ContentResolver) {
     private val pageSize = 300
 
     fun validate(grantId: String): String {
+        if (NativeDownloads.isGrant(grantId)) {
+            if (!NativeDownloads.hasAccess()) return "revoked"
+            val root = NativeDownloads.root()
+            return if (root.exists() && root.isDirectory && root.canRead()) "available" else "missing"
+        }
         val uri = Uri.parse(grantId)
         val permission = resolver.persistedUriPermissions.firstOrNull { it.uri == uri && it.isReadPermission }
             ?: return "revoked"
@@ -36,7 +42,47 @@ class SafTreeWalker(private val resolver: ContentResolver) {
         return result
     }
 
-    private fun scan(grantId: String): List<JSObject> {
+    private fun scan(grantId: String): List<JSObject> = if (NativeDownloads.isGrant(grantId)) scanDownloads(grantId) else scanSaf(grantId)
+
+    private fun scanDownloads(grantId: String): List<JSObject> {
+        require(NativeDownloads.hasAccess()) { "Downloads access is not granted" }
+        val root = NativeDownloads.root()
+        require(root.exists() && root.isDirectory) { "Downloads directory is unavailable" }
+        val queue = ArrayDeque<File>()
+        queue.add(root)
+        val out = mutableListOf<JSObject>()
+        while (queue.isNotEmpty()) {
+            val parent = queue.removeFirst()
+            val children = parent.listFiles()?.sortedBy { it.name.lowercase() } ?: continue
+            for (file in children) {
+                val relative = try { NativeDownloads.relative(root, file) } catch (_: Exception) { continue }
+                val directory = file.isDirectory
+                if (directory) queue.add(file)
+                val size = if (directory) 0L else file.length()
+                val modified = file.lastModified()
+                val source = JSObject().apply {
+                    put("kind", "saf-document")
+                    put("grantId", grantId)
+                    put("documentId", relative)
+                    put("name", file.name)
+                    put("size", size)
+                    if (modified > 0L) put("modifiedAt", modified)
+                }
+                out.add(JSObject().apply {
+                    put("source", source)
+                    put("name", file.name)
+                    put("relativePath", relative)
+                    put("mimeType", if (directory) DocumentsContract.Document.MIME_TYPE_DIR else "application/octet-stream")
+                    put("size", size)
+                    if (modified > 0L) put("modifiedAt", modified)
+                    put("directory", directory)
+                })
+            }
+        }
+        return out
+    }
+
+    private fun scanSaf(grantId: String): List<JSObject> {
         val tree = Uri.parse(grantId)
         val rootId = DocumentsContract.getTreeDocumentId(tree)
         val queue = ArrayDeque<Pair<String, String>>()

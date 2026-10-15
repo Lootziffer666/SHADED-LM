@@ -19,6 +19,7 @@ type NativeMaterializedBundle = Pick<MaterializedBundle, 'id' | 'primaryUrl' | '
 
 interface NativeAssetStoragePlugin {
   chooseTree(): Promise<TreeGrant>;
+  chooseDownloads(): Promise<TreeGrant>;
   validateGrant(options: { grantId: string }): Promise<{ state: GrantState }>;
   listTreePage(options: { grantId: string; cursor?: string }): Promise<SourcePage>;
   listZip(options: { source: SourceRef; maxDepth: number }): Promise<ZipCatalogResult>;
@@ -38,6 +39,10 @@ const webUrl = (url: string) => (url.startsWith('file:') ? Capacitor.convertFile
 export class CapacitorStorageGateway implements StorageGateway {
   chooseTree() {
     return NativeStorage.chooseTree();
+  }
+
+  chooseDownloads() {
+    return NativeStorage.chooseDownloads();
   }
 
   async validateGrant(grantId: string) {
