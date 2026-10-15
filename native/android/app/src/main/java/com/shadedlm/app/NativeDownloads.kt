@@ -31,4 +31,19 @@ object NativeDownloads {
         require(filePath.startsWith(rootPath)) { "Path escapes Downloads root" }
         return rootPath.relativize(filePath).toString().replace(File.separatorChar, '/')
     }
+
+    fun ensureDirectory(root: File, segments: List<String>): File {
+        require(segments.isNotEmpty()) { "Destination path is required" }
+        var current = root.canonicalFile
+        val rootPath = current.toPath()
+        for (raw in segments) {
+            val segment = SourcePathPolicy.clean(raw)
+            require(!segment.contains('/')) { "Destination segments cannot contain path separators" }
+            current = File(current, segment).canonicalFile
+            require(current.toPath().startsWith(rootPath)) { "Path escapes Downloads root" }
+            if (current.exists()) require(current.isDirectory) { "Destination is not a directory: $segment" }
+            else require(current.mkdir()) { "Unable to create destination directory: $segment" }
+        }
+        return current
+    }
 }
