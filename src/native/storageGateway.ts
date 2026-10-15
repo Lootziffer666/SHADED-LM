@@ -41,13 +41,13 @@ export interface ZipCatalogResult {
 
 /**
  * A native bundle materialized into WebView-readable URLs.
- * `primaryMember` is retained explicitly instead of trying to infer it back
- * from a converted file URL; this is the contract added by PR #2.
+ * New gateways retain bundle/primary identity explicitly; the fields remain
+ * optional so older test doubles and native implementations stay compatible.
  */
 export interface MaterializedBundle {
   id: string;
-  bundleId: string;
-  primaryMember: string;
+  bundleId?: string;
+  primaryMember?: string;
   primaryUrl: string;
   memberUrls: Record<string, string>;
   relativePaths: string[];
