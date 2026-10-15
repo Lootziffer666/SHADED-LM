@@ -18,4 +18,17 @@ describe('IndexQueue',()=>{
     expect((await db.jobs.get('job:b'))?.state).toBe('failed');
     await db.delete();
   });
+
+  it('reports completed over total and pauses after the current asset',async()=>{
+    const db=new LibraryDb(`progress-${crypto.randomUUID()}`);
+    await db.assets.bulkPut([asset('a'),asset('b'),asset('c')]);
+    await db.jobs.bulkPut(['a','b','c'].map(id=>({id:`job:${id}`,assetId:id,fingerprint:`fp:${id}`,state:'queued' as const,updatedAt:1})));
+    const progress:Array<[number,number,string]>=[];let pause=false;
+    const queue=new IndexQueue(db,async(a)=>{if(a.id==='a')pause=true;});
+    const summary=await queue.run({shouldPause:()=>pause,onProgress:p=>progress.push([p.completed,p.total,p.phase])});
+    expect(summary.paused).toBe(true);expect(summary.done).toBe(1);
+    expect(progress.at(-1)).toEqual([1,3,'paused']);
+    expect((await db.jobs.get('job:b'))?.state).toBe('queued');
+    await db.delete();
+  });
 });
