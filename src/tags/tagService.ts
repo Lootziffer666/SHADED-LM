@@ -1,0 +1,7 @@
+import type{LibraryDb}from'../db/libraryDb';
+export type TagState='all'|'mixed'|'none';export interface TagPatch{add:string[];remove:string[]}
+const RESERVED=new Set(['rigged','animated','facerig','face rig','textured','bonecount','bone count','animationcount','animation count','trianglecount','triangle count','filesize','file size']);
+const normalize=(tag:string)=>tag.trim().replace(/^#/,'');
+const key=(tag:string)=>normalize(tag).toLowerCase().replace(/[_-]/g,' ');
+export async function getTagState(db:LibraryDb,assetIds:string[],tag:string):Promise<TagState>{if(!assetIds.length)return'none';const assets=(await db.assets.bulkGet(assetIds)).filter(Boolean);const count=assets.filter(a=>a!.tags.some(t=>key(t)===key(tag))).length;return count===0?'none':count===assets.length?'all':'mixed'}
+export async function applyTagPatch(db:LibraryDb,assetIds:string[],patch:TagPatch):Promise<void>{const adds=patch.add.map(normalize).filter(Boolean),removes=patch.remove.map(normalize).filter(Boolean);for(const tag of [...adds,...removes])if(RESERVED.has(key(tag)))throw new Error(`Technical property cannot be a manual tag: ${tag}`);await db.transaction('rw',db.assets,async()=>{for(const id of assetIds){const asset=await db.assets.get(id);if(!asset)continue;let tags=[...asset.tags];for(const remove of removes)tags=tags.filter(t=>key(t)!==key(remove));for(const add of adds)if(!tags.some(t=>key(t)===key(add)))tags.push(add);await db.assets.update(id,{tags,updatedAt:Date.now()})}})}

@@ -1,0 +1,9 @@
+// @vitest-environment jsdom
+import{render,screen}from'@testing-library/react';
+import{describe,expect,it}from'vitest';
+import type{AssetRecord,AssetBundle,InspectionRecord}from'../domain/library';
+import{InspectorPanel}from'./InspectorPanel';
+const asset:AssetRecord={id:'a',displayName:'Village Woman 03',primaryFormat:'glb',primarySourceRef:{kind:'zip-entry',archive:{kind:'saf-document',grantId:'g',documentId:'z',name:'medieval.zip',size:1000},entryPath:'models/woman.glb',size:31400000},bundleId:'b',categoryPath:['Characters','Humans','Women'],tags:['medieval'],favorite:false,packId:'p',fingerprint:'fp',createdAt:1,updatedAt:1};
+const bundle:AssetBundle={id:'b',primaryMember:'models/woman.glb',members:[{relativePath:'models/woman.glb',source:asset.primarySourceRef,size:31400000,role:'primary'}],totalBytes:31400000,dependencyWarnings:[]};
+const inspection:InspectionRecord={meshCount:3,skinnedMeshCount:2,vertexCount:24320,triangleCount:42180,materialCount:4,textureCount:9,textured:true,skeletonCount:1,boneCount:67,boneNames:['Root','Jaw','Eye_L','Eye_R'],morphTargetCount:18,morphTargetNames:['jawOpen'],faceRig:{state:'face-rig',confidence:.82,evidence:['jaw-control','eye-controls']},animated:true,clipCount:14,clips:[{name:'Walk',duration:2.4,trackCount:20,targets:['Hips']}],bounds:{x:.6,y:1.75,z:.4},uvSetCount:2,hasNormals:true,hasTangents:true};
+describe('InspectorPanel',()=>{it('shows measured facts and never mockup quality claims',()=>{render(<InspectorPanel asset={asset} bundle={bundle} inspection={inspection} packName="Medieval Village Pack"/>);expect(screen.getByText(/42.180/)).toBeTruthy();expect(screen.getByText(/67 Bones/)).toBeTruthy();expect(screen.getByText(/18 Morph/)).toBeTruthy();expect(screen.getByText(/14 Clips/)).toBeTruthy();expect(screen.getByText(/medieval\.zip/)).toBeTruthy();const text=document.body.textContent??'';expect(text).not.toMatch(/Optimal|ARKit Compliant|Humanoid Valid|Audit Bestanden/i)})});

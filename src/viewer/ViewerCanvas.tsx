@@ -1,0 +1,152 @@
+import { useEffect, useRef } from 'react';
+import {
+  AmbientLight,
+  Box3,
+  Box3Helper,
+  Color,
+  DirectionalLight,
+  Mesh,
+  PerspectiveCamera,
+  Scene,
+  SkeletonHelper,
+  SRGBColorSpace,
+  WebGLRenderer,
+  type Material,
+} from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { AssetSession } from './AssetSession';
+import type { AnimationController } from './animationController';
+import { fitCameraToBox } from './cameraController';
+
+const materialsOf = (m: Material | Material[]) => (Array.isArray(m) ? m : [m]);
+
+function wireframe(root: AssetSession['loaded']['root'], enabled: boolean) {
+  const original = new Map<Material, boolean>();
+  root.traverse((o) => {
+    if (o instanceof Mesh) {
+      for (const m of materialsOf(o.material)) {
+        if (!('wireframe' in m)) continue;
+        original.set(m, (m as Material & { wireframe: boolean }).wireframe);
+        (m as Material & { wireframe: boolean }).wireframe = enabled;
+        m.needsUpdate = true;
+      }
+    }
+  });
+  return () => {
+    for (const [m, value] of original) {
+      (m as Material & { wireframe: boolean }).wireframe = value;
+      m.needsUpdate = true;
+    }
+  };
+}
+
+export function ViewerCanvas({
+  session,
+  animation,
+  showWireframe,
+  showBounds,
+  showSkeleton,
+  resetNonce,
+}: {
+  session: AssetSession;
+  animation?: AnimationController;
+  showWireframe: boolean;
+  showBounds: boolean;
+  showSkeleton: boolean;
+  resetNonce: number;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const reset = useRef<(() => void) | undefined>(undefined);
+
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+
+    const scene = new Scene();
+    scene.background = new Color(0xf3f6fb);
+    const camera = new PerspectiveCamera(45, 1, 0.01, 1000);
+    const renderer = new WebGLRenderer({ antialias: true });
+    renderer.outputColorSpace = SRGBColorSpace;
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    el.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    scene.add(new AmbientLight(0xffffff, 1.5));
+    const key = new DirectionalLight(0xffffff, 2.2);
+    key.position.set(4, 7, 5);
+    scene.add(key);
+    const rim = new DirectionalLight(0xb8d9ff, 1);
+    rim.position.set(-5, 3, -4);
+    scene.add(rim);
+    scene.add(session.loaded.root);
+
+    const box = new Box3().setFromObject(session.loaded.root);
+    const fit = () => {
+      const result = fitCameraToBox(camera, box);
+      controls.target.copy(result.center);
+      controls.update();
+    };
+    reset.current = fit;
+    fit();
+
+    let bounds: Box3Helper | undefined;
+    let skeleton: SkeletonHelper | undefined;
+    if (showBounds && !box.isEmpty()) {
+      bounds = new Box3Helper(box, 0x0050cb);
+      scene.add(bounds);
+    }
+    if (showSkeleton && session.inspection.boneCount > 0) {
+      skeleton = new SkeletonHelper(session.loaded.root);
+      scene.add(skeleton);
+    }
+
+    const restore = wireframe(session.loaded.root, showWireframe);
+    let frame = 0;
+    let last = performance.now();
+    const resize = () => {
+      const w = Math.max(1, el.clientWidth);
+      const h = Math.max(1, el.clientHeight);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    resize();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : undefined;
+    ro?.observe(el);
+
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      animation?.update(dt);
+      controls.update();
+      renderer.render(scene, camera);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+      restore();
+      bounds?.dispose();
+      if (skeleton) scene.remove(skeleton);
+      scene.remove(session.loaded.root);
+      controls.dispose();
+      renderer.dispose();
+      renderer.domElement.remove();
+      reset.current = undefined;
+    };
+  }, [session, animation, showWireframe, showBounds, showSkeleton]);
+
+  useEffect(() => {
+    reset.current?.();
+  }, [resetNonce]);
+
+  const animationOnly = session.inspection.meshCount === 0 && session.inspection.animated;
+  return (
+    <div className="viewer-canvas" ref={host}>
+      {animationOnly && <div className="viewer-empty">Animation-only Asset · {session.inspection.clipCount} Clips</div>}
+    </div>
+  );
+}

@@ -1,0 +1,14 @@
+export type ModelFormat='glb'|'gltf'|'fbx'|'obj';
+export type SafDocumentRef={kind:'saf-document';grantId:string;documentId:string;name:string;size?:number;modifiedAt?:number};
+export type ZipEntryRef={kind:'zip-entry';archive:SafDocumentRef|ZipEntryRef;entryPath:string;size?:number;crc32?:number;modifiedAt?:number};
+export type SourceRef=SafDocumentRef|ZipEntryRef;
+export interface AnimationClipInspection{name:string;duration:number;trackCount:number;targets:string[]}
+export interface FaceRigInspection{state:'none'|'face?'|'face-rig';confidence:number;evidence:string[]}
+export interface InspectionRecord{meshCount:number;skinnedMeshCount:number;vertexCount:number;triangleCount:number;materialCount:number;textureCount:number;textured:boolean;skeletonCount:number;boneCount:number;boneNames:string[];morphTargetCount:number;morphTargetNames:string[];faceRig:FaceRigInspection;animated:boolean;clipCount:number;clips:AnimationClipInspection[];bounds:{x:number;y:number;z:number};uvSetCount:number;hasNormals:boolean;hasTangents:boolean}
+export interface AssetRecord{id:string;displayName:string;primaryFormat:ModelFormat;primarySourceRef:SourceRef;bundleId:string;categoryPath:string[];tags:string[];favorite:boolean;packId?:string;thumbnailId?:string;fingerprint:string;inspection?:InspectionRecord;sourceAvailable?:boolean;createdAt:number;updatedAt:number}
+export interface BundleMember{relativePath:string;source:SourceRef;size?:number;role:'primary'|'material'|'texture'|'animation'|'other'}
+export interface AssetBundle{id:string;primaryMember:string;members:BundleMember[];totalBytes:number;dependencyWarnings:string[]}
+export interface PackRecord{id:string;name:string;sourceArchiveRef?:SourceRef;assetIds:string[]}
+export interface ThumbnailRecord{id:string;assetId:string;fingerprint:string;storageRef:string;width:number;height:number;generatedAt:number}
+export interface MoveJournalEntry{id:string;bundleId:string;sourceMembers:SourceRef[];destinationPath:string[];phase:'planned'|'copying'|'verifying'|'deleting-source'|'done'|'failed';verification?:string;createdAt:number;updatedAt:number}
+export interface IndexJobRecord{id:string;assetId:string;fingerprint:string;state:'queued'|'materializing'|'inspecting'|'thumbnailing'|'done'|'failed';error?:string;updatedAt:number}

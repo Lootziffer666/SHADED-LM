@@ -1,0 +1,3 @@
+import{describe,expect,it}from'vitest';import{resolveBundle}from'./resolveBundle';
+const s=(id:string)=>({kind:'saf-document' as const,grantId:'g',documentId:id,name:id});
+describe('resolveBundle',()=>{it('keeps OBJ material and textures in the same directory without basename cross-wiring',()=>{const catalog=[{relativePath:'a/knight.obj',source:s('o'),size:10},{relativePath:'a/knight.mtl',source:s('m'),size:2},{relativePath:'a/diffuse.png',source:s('t1'),size:4},{relativePath:'b/diffuse.png',source:s('t2'),size:5}];const b=resolveBundle(catalog[0],catalog);expect(b.members.map(x=>x.relativePath)).toEqual(['a/knight.obj','a/knight.mtl','a/diffuse.png']);expect(b.totalBytes).toBe(16)})});
