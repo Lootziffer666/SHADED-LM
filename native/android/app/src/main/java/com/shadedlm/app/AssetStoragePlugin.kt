@@ -1,9 +1,12 @@
 package com.shadedlm.app
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.Settings
 import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -42,6 +45,29 @@ class AssetStoragePlugin : Plugin() {
         try { context.contentResolver.takePersistableUriPermission(uri, flags) } catch (e: Exception) { call.reject("Unable to persist folder permission", e); return }
         val rootId = DocumentsContract.getTreeDocumentId(uri); val displayName = queryDisplayName(uri, rootId) ?: uri.lastPathSegment ?: "Assets"
         call.resolve(JSObject().apply { put("id", uri.toString()); put("uri", uri.toString()); put("displayName", displayName); put("rootDocumentId", rootId) })
+    }
+
+    @PluginMethod fun chooseDownloads(call: PluginCall) {
+        if (NativeDownloads.hasAccess()) { resolveDownloads(call); return }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) { call.reject("Direct Downloads access requires Android 11 or newer in this build"); return }
+        val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply { data = Uri.parse("package:${context.packageName}") }
+        try {
+            startActivityForResult(call, appIntent, "downloadsPermissionReturned")
+        } catch (_: ActivityNotFoundException) {
+            try { startActivityForResult(call, Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION), "downloadsPermissionReturned") }
+            catch (e: Exception) { call.reject("Unable to open Downloads access settings", e) }
+        }
+    }
+    @ActivityCallback private fun downloadsPermissionReturned(call: PluginCall?, result: ActivityResult) {
+        if (call == null) return
+        if (!NativeDownloads.hasAccess()) { call.reject("Downloads access was not granted"); return }
+        resolveDownloads(call)
+    }
+    private fun resolveDownloads(call: PluginCall) {
+        val root = NativeDownloads.root()
+        if (!root.exists()) root.mkdirs()
+        if (!root.isDirectory || !root.canRead()) { call.reject("Downloads directory is unavailable"); return }
+        call.resolve(JSObject().apply { put("id", NativeDownloads.GRANT_ID); put("displayName", "Downloads"); put("rootDocumentId", "Downloads") })
     }
 
     @PluginMethod fun createExportTarget(call: PluginCall) {
