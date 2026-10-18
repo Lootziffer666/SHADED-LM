@@ -6,6 +6,7 @@ import type {
   MoveBundleRequest,
   MoveBundleResult,
   MoveRecoverySummary,
+  SourceEntry,
   SourcePage,
   StorageGateway,
   TreeGrant,
@@ -18,12 +19,19 @@ export class FakeStorageGateway implements StorageGateway {
   released: string[] = [];
   state: GrantState = 'available';
   moves: MoveBundleRequest[] = [];
+  pickedFiles: SourceEntry[] = [];
+  sharedBundles: string[] = [];
+  openedBundles: string[] = [];
   exportWrites: Array<{ targetId: string; path: string; source?: SourceRef; base64?: string }> = [];
   finalizedExports: string[] = [];
   abortedExports: string[] = [];
 
   async chooseTree(): Promise<TreeGrant> {
     return { id: 'fake', displayName: 'Assets', rootDocumentId: 'root' };
+  }
+
+  async chooseFiles(): Promise<SourceEntry[]> {
+    return this.pickedFiles;
   }
 
   async validateGrant(): Promise<GrantState> {
@@ -52,6 +60,14 @@ export class FakeStorageGateway implements StorageGateway {
 
   async releaseMaterialization(id: string) {
     this.released.push(id);
+  }
+
+  async shareBundle(bundle: AssetBundle) {
+    this.sharedBundles.push(bundle.id);
+  }
+
+  async openBundle(bundle: AssetBundle) {
+    this.openedBundles.push(bundle.id);
   }
 
   async moveBundle(request: MoveBundleRequest): Promise<MoveBundleResult> {
