@@ -1,7 +1,7 @@
 import type{AssetBundle,AssetRecord,PackRecord,SourceRef}from'../domain/library';
 import type{LibraryDb}from'../db/libraryDb';
-import type{StorageGateway}from'../native/storageGateway';
-import{discoverSourceCatalog}from'./discoverSources';
+import type{SourceEntry,StorageGateway}from'../native/storageGateway';
+import{discoverSelectedSources,discoverSourceCatalog,type DiscoveryResult}from'./discoverSources';
 import{resolveBundle}from'./resolveBundle';
 import{fingerprintBundle}from'./fingerprint';
 
@@ -13,14 +13,8 @@ function nameWithoutExt(path:string){const n=path.slice(path.lastIndexOf('/')+1)
 function archiveIdentity(s:SourceRef):string{return s.kind==='zip-entry'?sourceIdentity(s.archive):sourceIdentity(s)}
 function sameBundleShape(a:AssetBundle|undefined,b:AssetBundle){if(!a||a.members.length!==b.members.length)return false;const sig=(x:AssetBundle)=>x.members.map(m=>`${m.role}:${m.size??'?'}:${m.relativePath.slice(m.relativePath.lastIndexOf('/')+1)}`).sort().join('|');return sig(a)===sig(b)}
 
-export async function indexSourceTree(gateway:StorageGateway,db:LibraryDb,grantId:string):Promise<IndexSummary>{
- const grant=await gateway.validateGrant(grantId);
- if(grant!=='available'){
-   const affected=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===grantId);
-   await db.assets.bulkPut(affected.map(a=>({...a,sourceAvailable:false,updatedAt:Date.now()})));
-   return{discovered:0,queued:0,unchanged:0,warnings:[`SAF grant ${grantId} is ${grant}`],unavailable:affected.length};
- }
- const discovery=await discoverSourceCatalog(gateway,grantId);let queued=0,unchanged=0;const seen=new Set<string>();const now=Date.now();
+async function persistDiscovery(db:LibraryDb,discovery:DiscoveryResult,scopeGrantId?:string):Promise<IndexSummary>{
+ let queued=0,unchanged=0;const seen=new Set<string>();const now=Date.now();
  for(const item of discovery.models){
    const identity=sourceIdentity(item.source),alias=(await db.settings.get(`sourceAlias:${identity}`))?.value;
    const id=typeof alias==='string'?alias:`asset:${identity}`;const existing=await db.assets.get(id);seen.add(id);
@@ -33,7 +27,21 @@ export async function indexSourceTree(gateway:StorageGateway,db:LibraryDb,grantI
    if(existing?.fingerprint===fingerprint){unchanged++;continue}
    const jobId=`job:${id}:${fingerprint}`;if(!(await db.jobs.get(jobId))){await db.jobs.put({id:jobId,assetId:id,fingerprint,state:'queued',updatedAt:now});queued++}
  }
- const missing=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===grantId&&!seen.has(a.id)&&a.sourceAvailable!==false);
- if(missing.length)await db.assets.bulkPut(missing.map(a=>({...a,sourceAvailable:false,updatedAt:now})));
- return{discovered:discovery.models.length,queued,unchanged,warnings:discovery.warnings.map(w=>w.message),unavailable:missing.length};
+ let unavailable=0;
+ if(scopeGrantId){const missing=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===scopeGrantId&&!seen.has(a.id)&&a.sourceAvailable!==false);unavailable=missing.length;if(missing.length)await db.assets.bulkPut(missing.map(a=>({...a,sourceAvailable:false,updatedAt:now})))}
+ return{discovered:discovery.models.length,queued,unchanged,warnings:discovery.warnings.map(w=>w.message),unavailable};
+}
+
+export async function indexSourceTree(gateway:StorageGateway,db:LibraryDb,grantId:string):Promise<IndexSummary>{
+ const grant=await gateway.validateGrant(grantId);
+ if(grant!=='available'){
+   const affected=(await db.assets.toArray()).filter(a=>sourceGrantId(a.primarySourceRef)===grantId);
+   await db.assets.bulkPut(affected.map(a=>({...a,sourceAvailable:false,updatedAt:Date.now()})));
+   return{discovered:0,queued:0,unchanged:0,warnings:[`SAF grant ${grantId} is ${grant}`],unavailable:affected.length};
+ }
+ return persistDiscovery(db,await discoverSourceCatalog(gateway,grantId),grantId);
+}
+
+export async function indexSourceEntries(gateway:StorageGateway,db:LibraryDb,entries:SourceEntry[]):Promise<IndexSummary>{
+ return persistDiscovery(db,await discoverSelectedSources(gateway,entries));
 }

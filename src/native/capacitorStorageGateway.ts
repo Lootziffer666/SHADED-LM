@@ -8,6 +8,7 @@ import type {
   MoveBundleRequest,
   MoveBundleResult,
   MoveRecoverySummary,
+  SourceEntry,
   SourcePage,
   StorageGateway,
   TreeGrant,
@@ -19,11 +20,14 @@ type NativeMaterializedBundle = Pick<MaterializedBundle, 'id' | 'primaryUrl' | '
 
 interface NativeAssetStoragePlugin {
   chooseTree(): Promise<TreeGrant>;
+  chooseFiles(): Promise<{ entries: SourceEntry[] }>;
   validateGrant(options: { grantId: string }): Promise<{ state: GrantState }>;
   listTreePage(options: { grantId: string; cursor?: string }): Promise<SourcePage>;
   listZip(options: { source: SourceRef; maxDepth: number }): Promise<ZipCatalogResult>;
   materialize(options: { bundle: AssetBundle }): Promise<NativeMaterializedBundle>;
   releaseMaterialization(options: { id: string }): Promise<void>;
+  shareBundle(options: { bundle: AssetBundle }): Promise<void>;
+  openBundle(options: { bundle: AssetBundle }): Promise<void>;
   moveBundle(options: { request: MoveBundleRequest }): Promise<MoveBundleResult>;
   recoverMoves(): Promise<MoveRecoverySummary>;
   createExportTarget(options: { suggestedName: string }): Promise<ExportTarget>;
@@ -38,6 +42,10 @@ const webUrl = (url: string) => (url.startsWith('file:') ? Capacitor.convertFile
 export class CapacitorStorageGateway implements StorageGateway {
   chooseTree() {
     return NativeStorage.chooseTree();
+  }
+
+  async chooseFiles() {
+    return (await NativeStorage.chooseFiles()).entries;
   }
 
   async validateGrant(grantId: string) {
@@ -66,6 +74,14 @@ export class CapacitorStorageGateway implements StorageGateway {
 
   releaseMaterialization(id: string) {
     return NativeStorage.releaseMaterialization({ id });
+  }
+
+  shareBundle(bundle: AssetBundle) {
+    return NativeStorage.shareBundle({ bundle });
+  }
+
+  openBundle(bundle: AssetBundle) {
+    return NativeStorage.openBundle({ bundle });
   }
 
   moveBundle(request: MoveBundleRequest) {

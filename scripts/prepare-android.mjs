@@ -20,6 +20,17 @@ patch(appGradle,text=>{
  return next;
 });
 if(existsSync(nativeSrc)){mkdirSync(join(android,'app','src'),{recursive:true});cpSync(nativeSrc,join(android,'app','src'),{recursive:true})}
+const manifest=join(android,'app','src','main','AndroidManifest.xml');
+if(existsSync(manifest))patch(manifest,text=>text.includes('androidx.core.content.FileProvider')?text:text.replace('</application>',`        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="\${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shaded_file_paths" />
+        </provider>
+    </application>`));
 const pluginFile=join(android,'app','src','main','java','com','shadedlm','app','AssetStoragePlugin.kt');
 if(existsSync(pluginFile)){
  const main=join(android,'app','src','main','java','com','shadedlm','app','MainActivity.java');mkdirSync(dirname(main),{recursive:true});writeFileSync(main,`package com.shadedlm.app;\n\nimport android.os.Bundle;\nimport com.getcapacitor.BridgeActivity;\n\npublic class MainActivity extends BridgeActivity {\n  @Override\n  public void onCreate(Bundle savedInstanceState) {\n    registerPlugin(AssetStoragePlugin.class);\n    super.onCreate(savedInstanceState);\n  }\n}\n`);

@@ -12,11 +12,14 @@ const asset: AssetRecord = { id: 'a', displayName: 'A', primaryFormat: 'obj', pr
 function gateway(result: MoveBundleResult, capture: (r: MoveBundleRequest) => void): StorageGateway {
   return {
     chooseTree: async () => ({ id: 'g', displayName: 'Assets', rootDocumentId: 'root' }),
+    chooseFiles: async () => [],
     validateGrant: async () => 'available',
     listTreePage: async () => ({ entries: [] }),
     listZip: async () => ({ entries: [], warnings: [] }),
     materialize: async () => ({ id: 'm', primaryUrl: '', memberUrls: {}, relativePaths: [] }),
     releaseMaterialization: async () => {},
+    shareBundle: async () => {},
+    openBundle: async () => {},
     moveBundle: async (r) => (capture(r), result),
     recoverMoves: async () => ({ recovered: 0, failed: 0 }),
     createExportTarget: async (suggestedName) => ({ id: 'export', name: suggestedName }),

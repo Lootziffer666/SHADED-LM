@@ -94,7 +94,11 @@ class MaterializationStore(private val context: Context) {
 
     private fun documentUri(source: JSONObject): Uri {
         val grant = Uri.parse(source.getString("grantId"))
-        return DocumentsContract.buildDocumentUriUsingTree(grant, source.getString("documentId"))
+        return if (DocumentsContract.isTreeUri(grant)) {
+            DocumentsContract.buildDocumentUriUsingTree(grant, source.getString("documentId"))
+        } else {
+            grant
+        }
     }
 
     private fun safeChild(root: File, relative: String): File {
