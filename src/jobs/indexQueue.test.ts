@@ -18,4 +18,17 @@ describe('IndexQueue',()=>{
     expect((await db.jobs.get('job:b'))?.state).toBe('failed');
     await db.delete();
   });
+
+  it('stops after ten queued assets and leaves the rest queued',async()=>{
+    const db=new LibraryDb(`queue-batch-${crypto.randomUUID()}`);
+    const ids=Array.from({length:12},(_,i)=>`asset-${i}`);
+    await db.assets.bulkPut(ids.map(asset));
+    await db.jobs.bulkPut(ids.map(id=>({id:`job:${id}`,assetId:id,fingerprint:`fp:${id}`,state:'queued' as const,updatedAt:1})));
+    const queue=new IndexQueue(db,async()=>{});
+    const summary=await queue.run(10);
+    expect(summary.done).toBe(10);
+    expect(summary.remaining).toBe(2);
+    expect(await db.jobs.where('state').equals('queued').count()).toBe(2);
+    await db.delete();
+  });
 });
