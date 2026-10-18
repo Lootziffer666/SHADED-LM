@@ -84,11 +84,14 @@ export interface ExportWrite {
 
 export interface StorageGateway {
   chooseTree(): Promise<TreeGrant>;
+  chooseFiles(): Promise<SourceEntry[]>;
   validateGrant(grantId: string): Promise<GrantState>;
   listTreePage(grantId: string, cursor?: string): Promise<SourcePage>;
   listZip(source: SourceRef, maxDepth: number): Promise<ZipCatalogResult>;
   materialize(bundle: AssetBundle): Promise<MaterializedBundle>;
   releaseMaterialization(id: string): Promise<void>;
+  shareBundle(bundle: AssetBundle): Promise<void>;
+  openBundle(bundle: AssetBundle): Promise<void>;
   moveBundle(request: MoveBundleRequest): Promise<MoveBundleResult>;
   recoverMoves(): Promise<MoveRecoverySummary>;
   createExportTarget(suggestedName: string): Promise<ExportTarget>;
